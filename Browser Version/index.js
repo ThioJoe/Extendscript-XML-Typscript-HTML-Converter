@@ -106,17 +106,25 @@ function parseProperty(prop, isStatic, isConstructor) {
     else {
         throw new Error("Unknown property " + prop.nodeName);
     }
+    
+    // --- IMPROVEMENT: Call the modified parseType function ---
+    const typeInfo = parseType(directFind(prop, ["datatype"]));
 
     const p = {
         type,
         isStatic,
         readonly: prop.getAttribute("rwaccess") === "readonly",
-        // Check for constructor from element type, not just name
         name: isConstructor ? "constructor" : (prop.getAttribute("name") || "").replace(/[^\[\]0-9a-zA-Z_$.]/g, "_"),
         desc: parseDesc(prop),
         params: parseParameters(directFindAll(prop, ["parameters", "parameter"])),
-        types: parseType(directFind(prop, ["datatype"])),
+        types: typeInfo.types,
     };
+
+    // Add the extracted description from the type tag
+    if (typeInfo.newDesc) {
+        p.desc.unshift(typeInfo.newDesc);
+    }
+
     // Standardize indexer name for the generator
     if (type === 'indexer') {
         p.name = "__indexer";
@@ -145,12 +153,21 @@ function parseParameters(parameters) {
     let previousWasOptional = false;
     // --- IMPROVEMENT: Use index to create fallback names ---
     for (const [i, parameter] of parameters.entries()) {
+        // --- IMPROVEMENT: Call the modified parseType function ---
+        const typeInfo = parseType(directFind(parameter, ["datatype"]));
+
         const param = {
             name: parameter.getAttribute("name") || `arg${i}`,
             desc: parseDesc(parameter),
             optional: previousWasOptional || !!parameter.getAttribute("optional"),
-            types: parseType(directFind(parameter, ["datatype"])),
+            types: typeInfo.types,
         };
+
+        // Add the extracted description from the type tag
+        if (typeInfo.newDesc) {
+            param.desc.unshift(typeInfo.newDesc);
+        }
+
         if (param.name.includes("...")) {
             param.name = "...rest";
             param.types[0].isArray = true;
@@ -267,22 +284,42 @@ function parseTypeFixTypeName(type) {
     }
 }
 
+/** --- IMPROVEMENT: This function now handles complex type strings --- */
 function parseType(datatype) {
     const types = [];
+    let newDesc;
+
     if (datatype) {
         const typeElement = directFind(datatype, ["type"]);
         const valueElement = directFind(datatype, ["value"]);
+        
+        let originalTypeName = typeElement ? typeElement.textContent || "" : "";
+        
+        // Regex to find a type preceded by a colon at the end of the string
+        const typeMatch = originalTypeName.match(/(.*):(\S+)$/);
+
+        if (typeMatch) {
+            newDesc = typeMatch[1].trim().replace(/\.$/, ''); // Extracted description
+            originalTypeName = typeMatch[2]; // The actual type
+        } else if (originalTypeName.includes(' ')) {
+            // If it has spaces but no colon, treat the whole thing as a description and default the type to 'any'
+            newDesc = originalTypeName;
+            originalTypeName = 'any';
+        }
+
         const type = {
-            name: typeElement ? typeElement.textContent || "" : "",
+            name: originalTypeName,
             isArray: !!directFind(datatype, ["array"]),
             value: valueElement ? valueElement.textContent || "" : undefined,
         };
+
         if (type.name === "Measurement Unit (Number or String)=any") {
             type.name = "number | string";
             if (type.isArray) {
                 type.name = "(" + type.name + ")";
             }
         }
+        
         parseTypeFixTypeName(type);
         types.push(type);
     }
@@ -292,7 +329,8 @@ function parseType(datatype) {
             isArray: false,
         });
     }
-    return types;
+    // Return both the cleaned types and any new description found
+    return { types, newDesc };
 }
 
 function removeInheritedProperties(definitions) {
