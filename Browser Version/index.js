@@ -303,6 +303,17 @@ function getListOfPropsToBeRemovedFor(definition, definitions) {
 }
 
 function sort(definitions) {
+    definitions.sort((a, b) => {
+        if (a.name < b.name) {
+            return -1;
+        }
+        else if (a.name > b.name) {
+            return 1;
+        }
+        else {
+            return 0;
+        }
+    });
     for (const definition of definitions) {
         definition.props.sort((a, b) => {
             if (a.type !== b.type) {
