@@ -1,162 +1,291 @@
 <!DOCTYPE html>
-<html lang="en" class="bg-gray-900 text-gray-100">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>XML to .d.ts Converter</title>
-    <!-- Using Tailwind CSS for simple, clean styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Basic styles for a modern look */
+        :root {
+            --bg-color: #1e1e1e;
+            --text-color: #e0e0e0;
+            --primary-color: #0d6efd;
+            --secondary-bg-color: #2a2a2a;
+            --border-color: #444;
+            --success-color: #20c997;
+            --error-color: #f85149;
+            --muted-text-color: #888;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
         }
-        .file-input-label {
-            cursor: pointer;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            background-color: #3b82f6; /* bg-blue-600 */
+
+        h1 {
+            text-align: center;
+            color: #f5f5f5;
+        }
+
+        #drop-zone {
+            border: 3px dashed var(--primary-color);
+            border-radius: 10px;
+            padding: 50px;
+            text-align: center;
+            color: var(--muted-text-color);
+            font-size: 1.2em;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        #drop-zone.dragover {
+            background-color: var(--secondary-bg-color);
+            border-color: #3d8bfd;
+            color: var(--text-color);
+        }
+
+        .file-input-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        #file-input::file-selector-button {
+            background-color: var(--primary-color);
             color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
             transition: background-color 0.2s;
         }
-        .file-input-label:hover {
-            background-color: #2563eb; /* bg-blue-700 */
+        
+        #file-input::file-selector-button:hover {
+            background-color: #3d8bfd;
         }
-        #convertButton {
+
+        #save-all-btn {
+            display: none; /* Hidden by default */
             cursor: pointer;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
-            background-color: #16a34a; /* bg-green-600 */
-            color: white;
+            background-color: var(--success-color);
+            color: #111;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1em;
+            font-weight: bold;
+            margin: 20px auto;
             transition: background-color 0.2s;
         }
-        #convertButton:hover {
-            background-color: #15803d; /* bg-green-700 */
+        
+        #save-all-btn:hover {
+             background-color: #48dac1;
         }
-        #convertButton:disabled {
-            background-color: #4b5563; /* bg-gray-600 */
-            cursor: not-allowed;
-            opacity: 0.7;
+
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--secondary-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+        }
+
+        .status-message {
+            font-style: italic;
+            color: var(--muted-text-color);
+        }
+
+        .error-message {
+            color: var(--error-color);
+            font-weight: bold;
+        }
+        
+        .success-message {
+            color: var(--success-color);
+            font-weight: bold;
         }
     </style>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
-<body class="flex items-center justify-center min-h-screen">
+<body>
 
-    <div class="w-full max-w-lg p-8 space-y-6 bg-gray-800 rounded-xl shadow-2xl">
-        <div class="text-center">
-            <h1 class="text-3xl font-bold text-white">XML to .d.ts Converter</h1>
-            <p class="mt-2 text-gray-400">Select an XML file to convert it to a TypeScript Declaration file.</p>
-        </div>
+    <h1>XML to .d.ts Converter</h1>
 
-        <!-- Hidden file input, controlled by the label -->
-        <input type="file" id="fileInput" class="hidden" accept=".xml">
-        
-        <div class="flex flex-col items-center space-y-4">
-             <!-- Visually appealing label for the file input -->
-            <label for="fileInput" class="file-input-label font-medium">
-                Select XML File
-            </label>
-            <button id="convertButton" disabled>Convert and Download</button>
-        </div>
-        
-        <div id="status" class="text-center text-gray-400 h-6"></div>
+    <div id="drop-zone">
+        <p>📂<br>Drag & Drop XML files here</p>
     </div>
 
-<script src="./index.js"></script>
+    <div class="file-input-container">
+        <p>or</p>
+        <label for="file-input">Select files:</label>
+        <input type="file" id="file-input" multiple accept=".xml,text/xml">
+    </div>
+    
+    <div id="results">
+        <p class="status-message">Waiting for files...</p>
+    </div>
+
+    <div style="text-align:center;">
+        <button id="save-all-btn">Save</button>
+    </div>
+
+    <script src="index.js"></script>
 
     <script>
-        const fileInput = document.getElementById('fileInput');
-        const convertButton = document.getElementById('convertButton');
-        const statusDiv = document.getElementById('status');
-        
-        let selectedFile = null;
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const resultsDiv = document.getElementById('results');
+        const saveAllButton = document.getElementById('save-all-btn');
 
-        // When a file is selected, enable the convert button
-        fileInput.addEventListener('change', (event) => {
-            selectedFile = event.target.files[0];
-            if (selectedFile) {
-                statusDiv.textContent = `Selected: ${selectedFile.name}`;
-                convertButton.disabled = false;
-            } else {
-                statusDiv.textContent = '';
-                convertButton.disabled = true;
+        let generatedFiles = []; // Stores { name: string, content: string }
+
+        // --- Drag and Drop Event Listeners ---
+        dropZone.addEventListener('dragover', (event) => {
+            event.preventDefault(); // Necessary to allow dropping
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (event) => {
+            event.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = event.dataTransfer.files;
+            if (files.length) {
+                handleFiles(Array.from(files));
             }
         });
 
-        // Handle the conversion when the button is clicked
-        convertButton.addEventListener('click', () => {
-            if (!selectedFile) {
-                statusDiv.textContent = 'Please select a file first.';
+        // --- File Input Listener ---
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                handleFiles(Array.from(fileInput.files));
+                fileInput.value = ''; // Reset for re-selection of the same file
+            }
+        });
+
+        // --- Central File Processing Logic ---
+        async function handleFiles(files) {
+            resultsDiv.innerHTML = '<p class="status-message">Processing...</p>';
+            generatedFiles = []; // Clear previous results
+
+            for (const file of files) {
+                if (file.type === 'text/xml' || file.name.endsWith('.xml')) {
+                    try {
+                        const xmlText = await file.text();
+                        const parser = new DOMParser();
+                        const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+                        const parseError = xmlDoc.querySelector('parsererror');
+                        if (parseError) {
+                            throw new Error(`XML parsing error in ${file.name}: ${parseError.textContent}`);
+                        }
+
+                        // Call your existing conversion function
+                        const dtsContent = window.convertXmlDomToDts(xmlDoc);
+                        const originalName = file.name.replace(/\.xml$/i, '');
+                        generatedFiles.push({ name: `${originalName}.d.ts`, content: dtsContent });
+
+                    } catch (error) {
+                        console.error(error);
+                        const message = document.createElement('p');
+                        message.className = 'error-message';
+                        message.textContent = error.message;
+                        resultsDiv.appendChild(message);
+                    }
+                } else {
+                     const message = document.createElement('p');
+                     message.textContent = `Skipping non-XML file: ${file.name}`;
+                     resultsDiv.appendChild(message);
+                }
+            }
+            
+            // Update UI after processing
+            let resultHTML = `<p class="status-message">Converted ${generatedFiles.length} of ${files.length} files.</p>`;
+            resultsDiv.innerHTML = resultHTML;
+
+            if (generatedFiles.length > 0) {
+                saveAllButton.style.display = 'block';
+                if (generatedFiles.length === 1) {
+                    saveAllButton.textContent = 'Save As...';
+                } else {
+                    saveAllButton.textContent = 'Save All to Directory';
+                }
+            } else {
+                saveAllButton.style.display = 'none';
+            }
+        }
+
+        // --- Save to Directory Logic ---
+        saveAllButton.addEventListener('click', async () => {
+            if (generatedFiles.length === 0) {
                 return;
             }
 
-            const reader = new FileReader();
+            // If there's only one file, trigger a simple "Save As" dialog
+            if (generatedFiles.length === 1) {
+                const file = generatedFiles[0];
+                const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = file.name;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(link.href);
+                return; // Stop here
+            }
 
-            // This function runs after the file is loaded into memory
-            reader.onload = (e) => {
+            // --- For MULTIPLE files, use the directory picker ---
+            if ('showDirectoryPicker' in window) {
                 try {
-                    const fileContent = e.target.result;
-
-                    // 1. Create the XML DOM object from the file's string content
-                    const parser = new DOMParser();
-                    const xmlDoc = parser.parseFromString(fileContent, "text/xml");
-
-                    // Check if the parser ran into a critical error
-                    if (xmlDoc.getElementsByTagName("parsererror").length) {
-                        throw new Error("Failed to parse XML. Please check the file format.");
+                    const dirHandle = await window.showDirectoryPicker();
+                    const existingFileNames = new Set();
+                    for await (const entry of dirHandle.values()) {
+                        existingFileNames.add(entry.name);
                     }
 
-                    // 2. Pass the DOM object to the globally available converter function
-                    const dtsContent = convertXmlDomToDts(xmlDoc);
+                    for (const file of generatedFiles) {
+                        let fileName = file.name;
+                        let counter = 2;
+                        
+                        while (existingFileNames.has(fileName)) {
+                            const nameWithoutExt = file.name.replace(/\.d\.ts$/, '');
+                            fileName = `${nameWithoutExt}-${counter}.d.ts`;
+                            counter++;
+                        }
+                        existingFileNames.add(fileName);
 
-                    // 3. Get the result and trigger a download
-                    const outputFilename = selectedFile.name.replace(/\.xml$/, '') + '.d.ts';
-                    downloadFile(dtsContent, outputFilename);
-
-                    statusDiv.textContent = 'Conversion successful! Downloading...';
-                } catch (error) {
-                    console.error('An error occurred during conversion:', error);
-                    statusDiv.textContent = `Error: ${error.message}`;
+                        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(file.content);
+                        await writable.close();
+                    }
+                    resultsDiv.innerHTML += '<p class="success-message">✅ Files saved successfully!</p>';
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error('Error saving files:', err);
+                        resultsDiv.innerHTML += `<p class="error-message">Could not save files. See console for details.</p>`;
+                    }
                 }
-            };
-            
-            reader.onerror = () => {
-                 statusDiv.textContent = 'Error reading file.';
-            };
-
-            // Start reading the file
-            reader.readAsText(selectedFile);
+            } else {
+                // Fallback for older browsers (for multiple files)
+                alert("Your browser doesn't support saving to a directory. Each file will be downloaded individually.");
+                for (const file of generatedFiles) {
+                    const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = file.name;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(link.href);
+                }
+            }
         });
-
-        /**
-         * Triggers a browser download for the given text content.
-         * @param {string} content The text content to be saved in the file.
-         * @param {string} filename The name of the file to be downloaded.
-         */
-        function downloadFile(content, filename) {
-            // Create a Blob (a file-like object) from the content
-            const blob = new Blob([content], { type: 'text/typescript;charset=utf-8;' });
-
-            // Create a temporary link element
-            const link = document.createElement("a");
-
-            // Create a URL for the Blob and set it as the link's href
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            
-            // Programmatically click the link to trigger the download
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-
-            // Clean up by removing the link and revoking the object URL
-            document.body.removeChild(link);
-            URL.revokeObjectURL(link.href);
-        }
     </script>
-
 </body>
 </html>
