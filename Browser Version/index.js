@@ -17,6 +17,7 @@ function directFindAll(element, selector) {
     if (currentSelector) {
         for (const child of Array.from(element.children)) {
             if (child.nodeName === currentSelector) {
+                // Fix: Pass a copy of the selector array to avoid modification issues in recursion
                 result = result.concat(directFindAll(child, selector.slice()));
             }
         }
@@ -32,6 +33,7 @@ function directFind(element, selector) {
     if (currentSelector) {
         for (const child of Array.from(element.children)) {
             if (child.nodeName === currentSelector) {
+                // Fix: Pass a copy of the selector array
                 const found = directFind(child, selector.slice());
                 if (found) {
                     return found;
@@ -57,21 +59,26 @@ function parse(xmlDocument) {
 }
 
 function parseDefinition(definition) {
+    // --- IMPROVEMENT: Check for a constructor to determine class vs. interface ---
+    const constructorEl = directFind(definition, ["elements", "constructor"]);
     let type;
     if (definition.getAttribute("enumeration")) {
         type = "enum";
     }
     else if (definition.getAttribute("dynamic")) {
-        type = "class";
+        type = constructorEl ? "class" : "interface";
     }
     else {
         throw new Error("Unknown definition");
     }
     const props = [];
     for (const element of directFindAll(definition, ["elements"])) {
-        const isStatic = element.getAttribute("type") === "class";
+        const typeAttr = element.getAttribute("type");
+        const isStatic = typeAttr === "class";
+        const isConstructor = typeAttr === "constructor";
         for (const property of Array.from(element.children)) {
-            const p = parseProperty(property, isStatic);
+            // Pass isConstructor to parseProperty
+            const p = parseProperty(property, isStatic, isConstructor);
             props.push(p);
         }
     }
@@ -85,9 +92,12 @@ function parseDefinition(definition) {
     };
 }
 
-function parseProperty(prop, isStatic) {
+function parseProperty(prop, isStatic, isConstructor) {
     let type;
-    if (prop.nodeName === "property") {
+    // --- IMPROVEMENT: Detect .index properties to create indexers ---
+    if (prop.getAttribute("name") === ".index") {
+        type = "indexer";
+    } else if (prop.nodeName === "property") {
         type = "property";
     }
     else if (prop.nodeName === "method") {
@@ -96,15 +106,21 @@ function parseProperty(prop, isStatic) {
     else {
         throw new Error("Unknown property " + prop.nodeName);
     }
+
     const p = {
         type,
         isStatic,
         readonly: prop.getAttribute("rwaccess") === "readonly",
-        name: (prop.getAttribute("name") || "").replace(/^\./, "").replace(/[^\[\]0-9a-zA-Z_$]/g, "_"),
+        // Check for constructor from element type, not just name
+        name: isConstructor ? "constructor" : (prop.getAttribute("name") || "").replace(/[^\[\]0-9a-zA-Z_$.]/g, "_"),
         desc: parseDesc(prop),
         params: parseParameters(directFindAll(prop, ["parameters", "parameter"])),
         types: parseType(directFind(prop, ["datatype"])),
     };
+    // Standardize indexer name for the generator
+    if (type === 'indexer') {
+        p.name = "__indexer";
+    }
     parseCanReturnAndAccept(p);
     return p;
 }
@@ -127,9 +143,10 @@ function parseDesc(element) {
 function parseParameters(parameters) {
     const params = [];
     let previousWasOptional = false;
-    for (const parameter of parameters) {
+    // --- IMPROVEMENT: Use index to create fallback names ---
+    for (const [i, parameter] of parameters.entries()) {
         const param = {
-            name: parameter.getAttribute("name") || "",
+            name: parameter.getAttribute("name") || `arg${i}`,
             desc: parseDesc(parameter),
             optional: previousWasOptional || !!parameter.getAttribute("optional"),
             types: parseType(directFind(parameter, ["datatype"])),
@@ -316,80 +333,117 @@ function sort(definitions) {
     });
     for (const definition of definitions) {
         definition.props.sort((a, b) => {
+            // Keep properties and indexers before methods
             if (a.type !== b.type) {
-                if (a.type < b.type) {
-                    return 1;
-                }
-                else if (a.type > b.type) {
-                    return -1;
-                }
-                else {
-                    return 0;
-                }
+                if(a.type === 'method') return 1;
+                if(b.type === 'method') return -1;
+            }
+            // Then sort alphabetically
+            if (a.name < b.name) {
+                return -1;
+            }
+            else if (a.name > b.name) {
+                return 1;
             }
             else {
-                if (a.name < b.name) {
-                    return -1;
-                }
-                else if (a.name > b.name) {
-                    return 1;
-                }
-                else {
-                    return 0;
-                }
+                return 0;
             }
         });
     }
     return definitions;
 }
 
+/** --- IMPROVEMENT: Rewritten to support namespaces --- */
 function generate(definitions) {
+    const namespaces = {};
+    const rootDefinitions = [];
+
+    // Group definitions by namespace or add to root
+    for (const def of definitions) {
+        if (def.name.includes('.')) {
+            const parts = def.name.split('.');
+            const ns = parts[0];
+            const className = parts.slice(1).join('.');
+            if (!namespaces[ns]) {
+                namespaces[ns] = [];
+            }
+            // Create a new definition object with the updated name for the namespace
+            const newDef = Object.assign({}, def, { name: className });
+            namespaces[ns].push(newDef);
+        } else {
+            rootDefinitions.push(def);
+        }
+    }
+
     let output = "";
-    for (const definition of definitions) {
-        output += "/**\n * " + definition.desc.join("\n * ") + "\n */\n";
-        const name = "declare " + definition.type + " " + definition.name;
-        const extend = definition.extend ? " extends " + definition.extend : "";
-        output += name + extend + " {\n";
-        for (const prop of definition.props) {
-            output += "\t/**\n\t * " + prop.desc.join("\n\t * ") + "\n";
-            if (prop.type === "method") {
-                const params = prop.params.map(param => {
-                    const methodName = generateFixParamName(param.name);
-                    const desc = param.desc.join(" ").trim();
-                    if (desc) {
-                        output += "\t * @param " + methodName + " " + desc + "\n";
-                    }
-                    return methodName + (param.optional ? "?" : "") + ": " + generateType(param.types);
-                });
-                output += "\t */\n";
-                const type = generateType(prop.types);
-                const staticKeyword = (prop.isStatic ? "static " : "");
-                if (prop.name === "[]") {
-                    output += "\t" + staticKeyword + "[" + params.join(", ") + "]: " + type + ";\n";
-                }
-                else if (prop.name === definition.name) {
-                    output += "\tconstructor(" + params.join(", ") + ");\n";
-                }
-                else {
-                    output += "\t" + staticKeyword + prop.name + "(" + params.join(", ") + "): " + type + ";\n";
-                }
-            }
-            else if (definition.type === "class") {
-                output += "\t */\n";
-                const className = prop.name === "constructor" ? "'constructor'" : prop.name;
-                const staticKeyword = (prop.isStatic ? "static " : "");
-                const readonlyKeyword = (prop.readonly ? "readonly " : "");
-                const type = generateType(prop.types);
-                output += "\t" + staticKeyword + readonlyKeyword + className + ": " + type + ";\n";
-            }
-            else if (definition.type === "enum") {
-                output += "\t */\n";
-                output += "\t" + prop.name + " = " + prop.types[0].value + ",\n";
-            }
-            output += "\n";
+
+    // Generate root-level definitions first
+    for (const definition of rootDefinitions) {
+        output += generateDefinition(definition);
+    }
+    
+    // Then generate namespaced definitions
+    for (const nsName in namespaces) {
+        output += "declare namespace " + nsName + " {\n";
+        for (const definition of namespaces[nsName]) {
+            output += generateDefinition(definition, "\t");
         }
         output += "}\n\n";
     }
+
+    return output;
+}
+
+/** --- IMPROVEMENT: Extracted definition generation into a helper function --- */
+function generateDefinition(definition, indent = "") {
+    let output = "";
+    output += indent + "/**\n" + indent + " * " + definition.desc.join("\n" + indent + " * ") + "\n" + indent + " */\n";
+    const name = "declare " + definition.type + " " + definition.name;
+    const extend = definition.extend ? " extends " + definition.extend : "";
+    output += indent + name + extend + " {\n";
+    
+    for (const prop of definition.props) {
+        const propIndent = indent + "\t";
+        output += propIndent + "/**\n" + propIndent + " * " + prop.desc.join("\n" + propIndent + " * ") + "\n";
+        
+        // --- IMPROVEMENT: Handle indexer, constructor, and method generation ---
+        if (prop.type === "method" || prop.type === "indexer") {
+            const params = prop.params.map(param => {
+                const methodName = generateFixParamName(param.name);
+                const desc = param.desc.join(" ").trim();
+                if (desc) {
+                    output += propIndent + " * @param " + methodName + " " + desc + "\n";
+                }
+                return methodName + (param.optional ? "?" : "") + ": " + generateType(param.types);
+            });
+            output += propIndent + " */\n";
+            const type = generateType(prop.types);
+            const staticKeyword = (prop.isStatic ? "static " : "");
+            const readonlyKeyword = (prop.readonly ? "readonly " : "");
+
+            if (prop.type === "indexer") {
+                output += propIndent + readonlyKeyword + "[" + params.join(", ") + "]: " + type + ";\n";
+            } else if (prop.name === "constructor") {
+                output += propIndent + "constructor(" + params.join(", ") + ");\n";
+            } else {
+                output += propIndent + staticKeyword + prop.name + "(" + params.join(", ") + "): " + type + ";\n";
+            }
+        }
+        else if (definition.type === "class" || definition.type === "interface") {
+            output += propIndent + " */\n";
+            const className = prop.name === "constructor" ? "'constructor'" : prop.name;
+            const staticKeyword = (prop.isStatic ? "static " : "");
+            const readonlyKeyword = (prop.readonly ? "readonly " : "");
+            const type = generateType(prop.types);
+            output += propIndent + staticKeyword + readonlyKeyword + className + ": " + type + ";\n";
+        }
+        else if (definition.type === "enum") {
+            output += propIndent + " */\n";
+            output += propIndent + prop.name + " = " + prop.types[0].value + ",\n";
+        }
+        output += "\n";
+    }
+    output += indent + "}\n\n";
     return output;
 }
 
