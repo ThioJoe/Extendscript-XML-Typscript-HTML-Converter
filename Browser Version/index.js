@@ -107,7 +107,6 @@ function parseProperty(prop, isStatic, isConstructor) {
         throw new Error("Unknown property " + prop.nodeName);
     }
     
-    // --- IMPROVEMENT: Call the modified parseType function ---
     const typeInfo = parseType(directFind(prop, ["datatype"]));
 
     const p = {
@@ -120,12 +119,10 @@ function parseProperty(prop, isStatic, isConstructor) {
         types: typeInfo.types,
     };
 
-    // Add the extracted description from the type tag
     if (typeInfo.newDesc) {
         p.desc.unshift(typeInfo.newDesc);
     }
 
-    // Standardize indexer name for the generator
     if (type === 'indexer') {
         p.name = "__indexer";
     }
@@ -148,36 +145,61 @@ function parseDesc(element) {
     return desc;
 }
 
+/** --- IMPROVEMENT: Correctly handle malformed parameter names as descriptions --- */
 function parseParameters(parameters) {
-    const params = [];
+    const finalParams = [];
     let previousWasOptional = false;
-    // --- IMPROVEMENT: Use index to create fallback names ---
-    for (const [i, parameter] of parameters.entries()) {
-        // --- IMPROVEMENT: Call the modified parseType function ---
-        const typeInfo = parseType(directFind(parameter, ["datatype"]));
 
+    for (const [i, parameterElement] of parameters.entries()) {
+        let paramName = parameterElement.getAttribute("name") || "";
+        let paramDesc = parseDesc(parameterElement);
+        
+        // Check if the name is invalid (contains spaces or starts with a number)
+        const isInvalidName = paramName.includes(" ") || paramName.match(/^\d/);
+        
+        if (isInvalidName) {
+            // Use the invalid name as a description, after cleaning it up.
+            const cleanedDesc = paramName.replace(/^\d+\s*/, '').trim();
+            if (cleanedDesc) {
+                paramDesc.unshift(cleanedDesc);
+            }
+            // Use a placeholder for the actual parameter name.
+            paramName = `arg${i}`;
+        } else {
+            // If the name is valid but empty, use a placeholder.
+            if (!paramName) {
+                paramName = `arg${i}`;
+            }
+        }
+        
+        const typeInfo = parseType(directFind(parameterElement, ["datatype"]));
+        if (typeInfo.newDesc) {
+            paramDesc.push(typeInfo.newDesc);
+        }
+        
         const param = {
-            name: parameter.getAttribute("name") || `arg${i}`,
-            desc: parseDesc(parameter),
-            optional: previousWasOptional || !!parameter.getAttribute("optional"),
+            name: paramName,
+            desc: paramDesc.filter(d => d && d.trim() !== ''),
+            optional: previousWasOptional || !!parameterElement.getAttribute("optional"),
             types: typeInfo.types,
         };
-
-        // Add the extracted description from the type tag
-        if (typeInfo.newDesc) {
-            param.desc.unshift(typeInfo.newDesc);
+        
+        if (param.desc.join(" ").toLowerCase().includes("optional")) {
+            param.optional = true;
         }
+        param.desc = param.desc.map(d => d.replace(/\(Optional\)/i, ""));
 
         if (param.name.includes("...")) {
             param.name = "...rest";
-            param.types[0].isArray = true;
+            if (param.types[0]) {
+               param.types[0].isArray = true;
+            }
         }
-        param.desc = param.desc.map(d => d.replace(/\(Optional\)/i, ""));
-        parseCanReturnAndAccept(param);
-        params.push(param);
-        previousWasOptional = previousWasOptional || param.optional;
+        
+        finalParams.push(param);
+        previousWasOptional = param.optional;
     }
-    return params;
+    return finalParams;
 }
 
 function parseCanReturnAndAccept(obj) {
@@ -284,7 +306,6 @@ function parseTypeFixTypeName(type) {
     }
 }
 
-/** --- IMPROVEMENT: This function now handles complex type strings --- */
 function parseType(datatype) {
     const types = [];
     let newDesc;
@@ -321,7 +342,9 @@ function parseType(datatype) {
         }
         
         parseTypeFixTypeName(type);
-        types.push(type);
+        if(type.name) {
+            types.push(type);
+        }
     }
     else {
         types.push({
@@ -391,7 +414,6 @@ function sort(definitions) {
     return definitions;
 }
 
-/** --- IMPROVEMENT: Rewritten to support namespaces --- */
 function generate(definitions) {
     const namespaces = {};
     const rootDefinitions = [];
@@ -432,7 +454,6 @@ function generate(definitions) {
     return output;
 }
 
-/** --- IMPROVEMENT: Extracted definition generation into a helper function --- */
 function generateDefinition(definition, indent = "") {
     let output = "";
     output += indent + "/**\n" + indent + " * " + definition.desc.join("\n" + indent + " * ") + "\n" + indent + " */\n";
@@ -444,7 +465,6 @@ function generateDefinition(definition, indent = "") {
         const propIndent = indent + "\t";
         output += propIndent + "/**\n" + propIndent + " * " + prop.desc.join("\n" + propIndent + " * ") + "\n";
         
-        // --- IMPROVEMENT: Handle indexer, constructor, and method generation ---
         if (prop.type === "method" || prop.type === "indexer") {
             const params = prop.params.map(param => {
                 const methodName = generateFixParamName(param.name);
