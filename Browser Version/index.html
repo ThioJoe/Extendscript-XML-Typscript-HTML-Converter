@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-900 text-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML to .d.ts Converter</title>
+    <!-- Using Tailwind CSS for simple, clean styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Basic styles for a modern look */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .file-input-label {
+            cursor: pointer;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            background-color: #3b82f6; /* bg-blue-600 */
+            color: white;
+            transition: background-color 0.2s;
+        }
+        .file-input-label:hover {
+            background-color: #2563eb; /* bg-blue-700 */
+        }
+        #convertButton {
+            cursor: pointer;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            background-color: #16a34a; /* bg-green-600 */
+            color: white;
+            transition: background-color 0.2s;
+        }
+        #convertButton:hover {
+            background-color: #15803d; /* bg-green-700 */
+        }
+        #convertButton:disabled {
+            background-color: #4b5563; /* bg-gray-600 */
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="flex items-center justify-center min-h-screen">
+
+    <div class="w-full max-w-lg p-8 space-y-6 bg-gray-800 rounded-xl shadow-2xl">
+        <div class="text-center">
+            <h1 class="text-3xl font-bold text-white">XML to .d.ts Converter</h1>
+            <p class="mt-2 text-gray-400">Select an XML file to convert it to a TypeScript Declaration file.</p>
+        </div>
+
+        <!-- Hidden file input, controlled by the label -->
+        <input type="file" id="fileInput" class="hidden" accept=".xml">
+        
+        <div class="flex flex-col items-center space-y-4">
+             <!-- Visually appealing label for the file input -->
+            <label for="fileInput" class="file-input-label font-medium">
+                Select XML File
+            </label>
+            <button id="convertButton" disabled>Convert and Download</button>
+        </div>
+        
+        <div id="status" class="text-center text-gray-400 h-6"></div>
+    </div>
+
+<script src="./index.js"></script>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const convertButton = document.getElementById('convertButton');
+        const statusDiv = document.getElementById('status');
+        
+        let selectedFile = null;
+
+        // When a file is selected, enable the convert button
+        fileInput.addEventListener('change', (event) => {
+            selectedFile = event.target.files[0];
+            if (selectedFile) {
+                statusDiv.textContent = `Selected: ${selectedFile.name}`;
+                convertButton.disabled = false;
+            } else {
+                statusDiv.textContent = '';
+                convertButton.disabled = true;
+            }
+        });
+
+        // Handle the conversion when the button is clicked
+        convertButton.addEventListener('click', () => {
+            if (!selectedFile) {
+                statusDiv.textContent = 'Please select a file first.';
+                return;
+            }
+
+            const reader = new FileReader();
+
+            // This function runs after the file is loaded into memory
+            reader.onload = (e) => {
+                try {
+                    const fileContent = e.target.result;
+
+                    // 1. Create the XML DOM object from the file's string content
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(fileContent, "text/xml");
+
+                    // Check if the parser ran into a critical error
+                    if (xmlDoc.getElementsByTagName("parsererror").length) {
+                        throw new Error("Failed to parse XML. Please check the file format.");
+                    }
+
+                    // 2. Pass the DOM object to the globally available converter function
+                    const dtsContent = convertXmlDomToDts(xmlDoc);
+
+                    // 3. Get the result and trigger a download
+                    const outputFilename = selectedFile.name.replace(/\.xml$/, '') + '.d.ts';
+                    downloadFile(dtsContent, outputFilename);
+
+                    statusDiv.textContent = 'Conversion successful! Downloading...';
+                } catch (error) {
+                    console.error('An error occurred during conversion:', error);
+                    statusDiv.textContent = `Error: ${error.message}`;
+                }
+            };
+            
+            reader.onerror = () => {
+                 statusDiv.textContent = 'Error reading file.';
+            };
+
+            // Start reading the file
+            reader.readAsText(selectedFile);
+        });
+
+        /**
+         * Triggers a browser download for the given text content.
+         * @param {string} content The text content to be saved in the file.
+         * @param {string} filename The name of the file to be downloaded.
+         */
+        function downloadFile(content, filename) {
+            // Create a Blob (a file-like object) from the content
+            const blob = new Blob([content], { type: 'text/typescript;charset=utf-8;' });
+
+            // Create a temporary link element
+            const link = document.createElement("a");
+
+            // Create a URL for the Blob and set it as the link's href
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            
+            // Programmatically click the link to trigger the download
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+
+            // Clean up by removing the link and revoking the object URL
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+    </script>
+
+</body>
+</html>
