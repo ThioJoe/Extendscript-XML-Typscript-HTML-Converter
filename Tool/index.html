@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XML to .d.ts Converter</title>
+    <title>XML & DLL to .d.ts Converter</title>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -31,57 +32,69 @@
             color: #f5f5f5;
         }
 
-        #drop-zone {
-            border: 3px dashed var(--primary-color);
-            border-radius: 10px;
-            padding: 50px;
-            text-align: center;
-            color: var(--muted-text-color);
-            font-size: 1.2em;
-            transition: background-color 0.2s, border-color 0.2s;
+        h3 {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-top: 30px;
         }
 
-        #drop-zone.dragover {
-            background-color: var(--secondary-bg-color);
-            border-color: #3d8bfd;
+        .drop-zone {
+            border: 3px dashed var(--border-color);
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            color: var(--muted-text-color);
+            font-size: 1.1em;
+            transition: all 0.2s;
+            margin-bottom: 20px;
+            background: var(--secondary-bg-color);
+        }
+
+        .drop-zone.dragover {
+            background-color: #3d3d3d;
+            border-color: var(--primary-color);
             color: var(--text-color);
         }
 
-        .file-input-container {
-            text-align: center;
-            margin: 20px 0;
+        .drop-zone.active {
+            border-color: var(--success-color);
         }
-        
-        #file-input::file-selector-button {
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .btn-select {
             background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 8px 12px;
+            padding: 8px 16px;
             border-radius: 5px;
             cursor: pointer;
-            transition: background-color 0.2s;
+            font-size: 0.9em;
+            margin-top: 10px;
         }
-        
-        #file-input::file-selector-button:hover {
+
+        .btn-select:hover {
             background-color: #3d8bfd;
         }
 
         #save-all-btn {
-            display: none; /* Hidden by default */
+            display: none;
             cursor: pointer;
             background-color: var(--success-color);
             color: #111;
-            padding: 12px 20px;
+            padding: 12px 25px;
             border: none;
             border-radius: 5px;
-            font-size: 1em;
+            font-size: 1.1em;
             font-weight: bold;
-            margin: 20px auto;
+            margin: 30px auto;
             transition: background-color 0.2s;
         }
-        
+
         #save-all-btn:hover {
-             background-color: #48dac1;
+            background-color: #48dac1;
         }
 
         #results {
@@ -90,6 +103,19 @@
             background-color: var(--secondary-bg-color);
             border: 1px solid var(--border-color);
             border-radius: 5px;
+            min-height: 50px;
+        }
+
+        .file-list {
+            text-align: left;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
         }
 
         .status-message {
@@ -101,191 +127,159 @@
             color: var(--error-color);
             font-weight: bold;
         }
-        
+
         .success-message {
             color: var(--success-color);
             font-weight: bold;
         }
     </style>
 </head>
+
 <body>
 
-    <h1>XML to .d.ts Converter</h1>
+    <h1>ExtendScript DOM Parser</h1>
 
-    <div id="drop-zone">
-        <p>📂<br>Drag & Drop XML files here</p>
+    <h3>1. XML Definitions</h3>
+    <div id="xml-zone" class="drop-zone">
+        <p>📂 Drag & Drop XML files here</p>
+        <button class="btn-select" onclick="document.getElementById('xml-input').click()">Select XMLs</button>
+        <input type="file" id="xml-input" multiple accept=".xml,text/xml">
+        <div id="xml-list" class="file-list"></div>
     </div>
 
-    <div class="file-input-container">
-        <p>or</p>
-        <label for="file-input">Select files:</label>
-        <input type="file" id="file-input" multiple accept=".xml,text/xml">
+    <h3>2. Binaries (Optional fix for broken XML)</h3>
+    <div id="dll-zone" class="drop-zone">
+        <p>⚙️ Drag & Drop DLL/Binary files here (e.g. Batch.dll)</p>
+        <button class="btn-select" onclick="document.getElementById('dll-input').click()">Select DLLs</button>
+        <input type="file" id="dll-input" multiple accept=".dll,.exe,.rpl,application/x-msdownload">
+        <div id="dll-list" class="file-list"></div>
     </div>
-    
+
     <div id="results">
-        <p class="status-message">Waiting for files...</p>
+        <p class="status-message">Ready.</p>
     </div>
 
     <div style="text-align:center;">
-        <button id="save-all-btn">Save</button>
+        <button id="save-all-btn">Process & Save</button>
     </div>
 
     <script src="index.js"></script>
 
     <script>
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const resultsDiv = document.getElementById('results');
-        const saveAllButton = document.getElementById('save-all-btn');
+        const ui = {
+            xml: { zone: document.getElementById('xml-zone'), input: document.getElementById('xml-input'), list: document.getElementById('xml-list'), files: [] },
+            dll: { zone: document.getElementById('dll-zone'), input: document.getElementById('dll-input'), list: document.getElementById('dll-list'), files: [] },
+            results: document.getElementById('results'),
+            btn: document.getElementById('save-all-btn')
+        };
 
-        let generatedFiles = []; // Stores { name: string, content: string }
+        let generatedFiles = [];
 
-        // --- Drag and Drop Event Listeners ---
-        dropZone.addEventListener('dragover', (event) => {
-            event.preventDefault(); // Necessary to allow dropping
-            dropZone.classList.add('dragover');
-        });
+        function setupDropZone(type) {
+            const { zone, input, list, files } = ui[type];
 
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                handleFiles(type, e.dataTransfer.files);
+            });
+            input.addEventListener('change', () => handleFiles(type, input.files));
+        }
 
-        dropZone.addEventListener('drop', (event) => {
-            event.preventDefault();
-            dropZone.classList.remove('dragover');
-            const files = event.dataTransfer.files;
-            if (files.length) {
-                handleFiles(Array.from(files));
-            }
-        });
-
-        // --- File Input Listener ---
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length) {
-                handleFiles(Array.from(fileInput.files));
-                fileInput.value = ''; // Reset for re-selection of the same file
-            }
-        });
-
-        // --- Central File Processing Logic ---
-        async function handleFiles(files) {
-            resultsDiv.innerHTML = '<p class="status-message">Processing...</p>';
-            generatedFiles = []; // Clear previous results
-
-            for (const file of files) {
-                if (file.type === 'text/xml' || file.name.endsWith('.xml')) {
-                    try {
-                        const xmlText = await file.text();
-                        const parser = new DOMParser();
-                        const xmlDoc = parser.parseFromString(xmlText, "application/xml");
-
-                        const parseError = xmlDoc.querySelector('parsererror');
-                        if (parseError) {
-                            throw new Error(`XML parsing error in ${file.name}: ${parseError.textContent}`);
-                        }
-
-                        // Call your existing conversion function
-                        const dtsContent = window.convertXmlDomToDts(xmlDoc);
-                        const originalName = file.name.replace(/\.xml$/i, '');
-                        generatedFiles.push({ name: `${originalName}.d.ts`, content: dtsContent });
-
-                    } catch (error) {
-                        console.error(error);
-                        const message = document.createElement('p');
-                        message.className = 'error-message';
-                        message.textContent = error.message;
-                        resultsDiv.appendChild(message);
-                    }
-                } else {
-                     const message = document.createElement('p');
-                     message.textContent = `Skipping non-XML file: ${file.name}`;
-                     resultsDiv.appendChild(message);
+        function handleFiles(type, newFiles) {
+            const targetArray = ui[type].files;
+            // Convert FileList to Array and dedup based on name
+            Array.from(newFiles).forEach(f => {
+                if (!targetArray.find(existing => existing.name === f.name)) {
+                    targetArray.push(f);
                 }
-            }
-            
-            // Update UI after processing
-            let resultHTML = `<p class="status-message">Converted ${generatedFiles.length} of ${files.length} files.</p>`;
-            resultsDiv.innerHTML = resultHTML;
+            });
+            renderList(type);
+            checkReady();
+        }
 
-            if (generatedFiles.length > 0) {
-                saveAllButton.style.display = 'block';
-                if (generatedFiles.length === 1) {
-                    saveAllButton.textContent = 'Save As...';
-                } else {
-                    saveAllButton.textContent = 'Save All to Directory';
-                }
-            } else {
-                saveAllButton.style.display = 'none';
+        function renderList(type) {
+            const { list, files, zone } = ui[type];
+            list.innerHTML = files.map(f => `<div class="file-item"><span>${f.name}</span><span>${(f.size / 1024).toFixed(1)}KB</span></div>`).join('');
+            if (files.length > 0) zone.classList.add('active');
+        }
+
+        function checkReady() {
+            if (ui.xml.files.length > 0) {
+                ui.btn.style.display = 'block';
+                ui.results.innerHTML = `<p class="status-message">Ready to process ${ui.xml.files.length} XML files and ${ui.dll.files.length} binaries.</p>`;
             }
         }
 
-        // --- Save to Directory Logic ---
-        saveAllButton.addEventListener('click', async () => {
-            if (generatedFiles.length === 0) {
-                return;
-            }
+        setupDropZone('xml');
+        setupDropZone('dll');
 
-            // If there's only one file, trigger a simple "Save As" dialog
-            if (generatedFiles.length === 1) {
-                const file = generatedFiles[0];
-                const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = file.name;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(link.href);
-                return; // Stop here
-            }
+        ui.btn.addEventListener('click', async () => {
+            ui.results.innerHTML = '<p class="status-message">Processing... this may take a moment.</p>';
+            generatedFiles = [];
 
-            // --- For MULTIPLE files, use the directory picker ---
-            if ('showDirectoryPicker' in window) {
-                try {
-                    const dirHandle = await window.showDirectoryPicker();
-                    const existingFileNames = new Set();
-                    for await (const entry of dirHandle.values()) {
-                        existingFileNames.add(entry.name);
+            try {
+                // 1. Load all DLLs into memory first
+                const dllBuffers = [];
+                for (const file of ui.dll.files) {
+                    const buffer = await file.arrayBuffer();
+                    dllBuffers.push({ name: file.name, data: new Uint8Array(buffer) });
+                }
+
+                // 2. Process XMLs
+                for (const file of ui.xml.files) {
+                    const xmlText = await file.text();
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+
+                    if (xmlDoc.querySelector('parsererror')) {
+                        throw new Error(`XML Error in ${file.name}`);
                     }
 
-                    for (const file of generatedFiles) {
-                        let fileName = file.name;
-                        let counter = 2;
-                        
-                        while (existingFileNames.has(fileName)) {
-                            const nameWithoutExt = file.name.replace(/\.d\.ts$/, '');
-                            fileName = `${nameWithoutExt}-${counter}.d.ts`;
-                            counter++;
-                        }
-                        existingFileNames.add(fileName);
+                    // *** CORE PROCESSING ***
+                    const dtsContent = window.convertXmlDomToDts(xmlDoc, dllBuffers);
 
-                        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                    const originalName = file.name.replace(/\.xml$/i, '');
+                    generatedFiles.push({ name: `${originalName}.d.ts`, content: dtsContent });
+                }
+
+                ui.results.innerHTML = `<p class="success-message">✅ Processed ${generatedFiles.length} files!</p>`;
+                saveFiles();
+
+            } catch (err) {
+                console.error(err);
+                ui.results.innerHTML += `<p class="error-message">Error: ${err.message}</p>`;
+            }
+        });
+
+        async function saveFiles() {
+            if (generatedFiles.length === 0) return;
+
+            if ('showDirectoryPicker' in window && generatedFiles.length > 1) {
+                try {
+                    const dirHandle = await window.showDirectoryPicker();
+                    for (const file of generatedFiles) {
+                        const fileHandle = await dirHandle.getFileHandle(file.name, { create: true });
                         const writable = await fileHandle.createWritable();
                         await writable.write(file.content);
                         await writable.close();
                     }
-                    resultsDiv.innerHTML += '<p class="success-message">✅ Files saved successfully!</p>';
-                } catch (err) {
-                    if (err.name !== 'AbortError') {
-                        console.error('Error saving files:', err);
-                        resultsDiv.innerHTML += `<p class="error-message">Could not save files. See console for details.</p>`;
-                    }
+                } catch (e) {
+                    console.log("Cancelled or error", e);
                 }
             } else {
-                // Fallback for older browsers (for multiple files)
-                alert("Your browser doesn't support saving to a directory. Each file will be downloaded individually.");
                 for (const file of generatedFiles) {
-                    const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = file.name;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(link.href);
+                    const blob = new Blob([file.content], { type: 'text/plain' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = file.name;
+                    a.click();
                 }
             }
-        });
+        }
     </script>
 </body>
+
 </html>
