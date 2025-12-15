@@ -132,6 +132,26 @@
             color: var(--success-color);
             font-weight: bold;
         }
+
+        .info-note {
+            background-color: #2a3f5f;
+            border-left: 4px solid var(--primary-color);
+            padding: 12px 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .info-note strong {
+            color: #5ea3f5;
+        }
+
+        .info-note code {
+            background-color: #1e1e1e;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
     </style>
 </head>
 
@@ -154,7 +174,14 @@
         <input type="file" id="dll-input" multiple accept=".dll,.exe,.rpl,application/x-msdownload">
         <div id="dll-list" class="file-list"></div>
     </div>
-
+    <div class="info-note">
+        <strong>💡 Tip:</strong> Look for these possible DLLs in your particular application's install folder, for example:
+        <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• <code>ScriptLayer.dll</code>
+        <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• <code>Batch.dll</code>
+        <br>For some apps, it might have a more specific name, and there could be multiple like:
+        <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• <code>ScriptLayerPProQE.dll</code>
+        <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• <code>ScriptLayerPPro.dll</code>
+    </div>
     <div id="results">
         <p class="status-message">Ready.</p>
     </div>
