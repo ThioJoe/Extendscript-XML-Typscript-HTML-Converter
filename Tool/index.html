@@ -247,6 +247,17 @@
             ui.results.innerHTML = '<p class="status-message">Processing... this may take a moment.</p>';
             generatedFiles = [];
 
+            let dirHandle = null;
+            if ('showDirectoryPicker' in window && ui.xml.files.length > 1) {
+                try {
+                    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                } catch (e) {
+                    console.log("Directory picker cancelled or failed", e);
+                    ui.results.innerHTML = '<p class="status-message">Ready.</p>';
+                    return;
+                }
+            }
+
             try {
                 // 1. Load all DLLs into memory first
                 const dllBuffers = [];
@@ -273,7 +284,7 @@
                 }
 
                 ui.results.innerHTML = `<p class="success-message">✅ Processed ${generatedFiles.length} files!</p>`;
-                saveFiles();
+                saveFiles(dirHandle);
 
             } catch (err) {
                 console.error(err);
@@ -281,12 +292,11 @@
             }
         });
 
-        async function saveFiles() {
+        async function saveFiles(dirHandle) {
             if (generatedFiles.length === 0) return;
 
-            if ('showDirectoryPicker' in window && generatedFiles.length > 1) {
+            if (dirHandle) {
                 try {
-                    const dirHandle = await window.showDirectoryPicker();
                     for (const file of generatedFiles) {
                         const fileHandle = await dirHandle.getFileHandle(file.name, { create: true });
                         const writable = await fileHandle.createWritable();
@@ -294,7 +304,7 @@
                         await writable.close();
                     }
                 } catch (e) {
-                    console.log("Cancelled or error", e);
+                    console.log("Error saving files:", e);
                 }
             } else {
                 for (const file of generatedFiles) {
