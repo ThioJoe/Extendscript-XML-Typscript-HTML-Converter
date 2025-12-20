@@ -1334,15 +1334,21 @@ function generateDefinition(definition, indent = "") {
     let output = "";
 
     // Class/Interface JSDoc
-    output += indent + "/**\n" + indent + " * " + definition.desc.join("\n" + indent + " * ") + "\n" + indent + " */\n";
-
+    if (definition.desc.length > 0) { // If no description, don't add the comment lines, they'll just be blank
+        output += indent + "/**\n" + indent + " * " + definition.desc.join("\n" + indent + " * ") + "\n" + indent + " */\n";
+    }
+    
     const name = "declare " + definition.type + " " + definition.name;
     const extend = definition.extend ? " extends " + definition.extend : "";
     output += indent + name + extend + " {\n";
 
     for (const prop of definition.props) {
+        let propCommentLines = "";
+        let propSignatureString = "";
         const propIndent = indent + "\t";
-        output += propIndent + "/**\n" + propIndent + " * " + prop.desc.join("\n" + propIndent + " * ") + "\n";
+        
+        const propDescriptionLine = propIndent + " * " + prop.desc.join("\n" + propIndent + " * ") + "\n"
+        propCommentLines += propIndent + "/**\n" + propDescriptionLine;
 
         if (prop.type === "method" || prop.type === "indexer") {
             // Generate Method Signature
@@ -1350,37 +1356,46 @@ function generateDefinition(definition, indent = "") {
                 const methodName = generateFixParamName(param.name);
                 const desc = param.desc.join(" ").trim();
                 // Add @param JSDoc
-                if (desc) output += propIndent + " * @param " + methodName + " " + desc + "\n";
+                if (desc) propCommentLines += propIndent + " * @param " + methodName + " " + desc + "\n";
                 return methodName + (param.optional ? "?" : "") + ": " + generateType(param.types);
             });
-            output += propIndent + " */\n";
+            propCommentLines += propIndent + " */\n";
 
             const type = generateType(prop.types);
             const staticKeyword = (prop.isStatic ? "static " : "");
             const readonlyKeyword = (prop.readonly ? "readonly " : "");
 
             if (prop.type === "indexer") {
-                output += propIndent + readonlyKeyword + "[" + params.join(", ") + "]: " + type + ";\n";
+                propSignatureString += propIndent + readonlyKeyword + "[" + params.join(", ") + "]: " + type + ";\n";
             } else if (prop.name === "constructor") {
-                output += propIndent + "constructor(" + params.join(", ") + ");\n";
+                propSignatureString += propIndent + "constructor(" + params.join(", ") + ");\n";
             } else {
-                output += propIndent + staticKeyword + prop.name + "(" + params.join(", ") + "): " + type + ";\n";
+                propSignatureString += propIndent + staticKeyword + prop.name + "(" + params.join(", ") + "): " + type + ";\n";
             }
         }
         else if (definition.type === "class" || definition.type === "interface") {
             // Nested Class/Interface property (used in dynamic definitions)
-            output += propIndent + " */\n";
+            propCommentLines += propIndent + " */\n";
             const className = prop.name === "constructor" ? "'constructor'" : prop.name;
             const staticKeyword = (prop.isStatic ? "static " : "");
             const readonlyKeyword = (prop.readonly ? "readonly " : "");
             const type = generateType(prop.types);
-            output += propIndent + staticKeyword + readonlyKeyword + className + ": " + type + ";\n";
+            propSignatureString += propIndent + staticKeyword + readonlyKeyword + className + ": " + type + ";\n";
         }
         else if (definition.type === "enum") {
             // Enum Member
-            output += propIndent + " */\n";
-            output += propIndent + prop.name + " = " + prop.types[0].value + ",\n";
+            propCommentLines += propIndent + " */\n";
+            propSignatureString += propIndent + prop.name + " = " + prop.types[0].value + ",\n";
         }
+
+        // Check if there is actually any description contents
+        let testTrimmedPropComments = propCommentLines;
+        testTrimmedPropComments = testTrimmedPropComments.replace(/\n/g, "").replace(/\t/g, "").replace(/\*/g, "").replace(/ /g, "").replace(/\//g, "");
+        if (testTrimmedPropComments.length > 0) {
+            output += propCommentLines;
+        }
+        
+        output += propSignatureString;
         output += "\n";
     }
     output += indent + "}\n\n";
