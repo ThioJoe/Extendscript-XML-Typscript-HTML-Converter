@@ -1342,6 +1342,10 @@ function generateDefinition(definition, indent = "") {
     const extend = definition.extend ? " extends " + definition.extend : "";
     output += indent + name + extend + " {\n";
 
+    // Track whether the previous property had JSDoc lines so we can add a space after that. Otherwise don't add space between properties/methods without comments
+    // Set the first one to true as default so it adds a space for the first one
+    let previousPropHadDescription = true;
+
     for (const prop of definition.props) {
         let propCommentLines = "";
         let propSignatureString = "";
@@ -1391,12 +1395,20 @@ function generateDefinition(definition, indent = "") {
         // Check if there is actually any description contents
         let testTrimmedPropComments = propCommentLines;
         testTrimmedPropComments = testTrimmedPropComments.replace(/\n/g, "").replace(/\t/g, "").replace(/\*/g, "").replace(/ /g, "").replace(/\//g, "");
+
+        // Don't bother adding lines between properties/methods that don't have descriptions
+        if (testTrimmedPropComments.length > 0 || previousPropHadDescription === true) {
+            output += "\n";
+        }
+         
         if (testTrimmedPropComments.length > 0) {
             output += propCommentLines;
+            previousPropHadDescription = true;
+        } else {
+            previousPropHadDescription = false;
         }
         
         output += propSignatureString;
-        output += "\n";
     }
     output += indent + "}\n\n";
     return output;
